@@ -1,3 +1,3 @@
-# Spark Brow (Safari-Style Liquid Glass + SparkOS Homepage)
+# Spark Brow (SparkOS Native Browser)
 
-Upload all files (including `.github/workflows/build-dmg.yml` and `sparkos.html`) to your `Spark-Brow` GitHub repo, then download `Spark-Brow-DMG` from the **Actions** tab.
+SparkOS 12.7 is the browser: every new tab opens SparkOS, and clicking any app or search opens directly inside Spark Brow tabs.

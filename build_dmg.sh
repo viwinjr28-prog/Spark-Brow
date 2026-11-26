@@ -19,8 +19,8 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" << 'PLIST'
   <key>CFBundleName</key><string>Spark Brow</string>
   <key>CFBundleDisplayName</key><string>Spark Brow</string>
   <key>CFBundleIdentifier</key><string>com.viwin.sparkbrow</string>
-  <key>CFBundleVersion</key><string>2.0</string>
-  <key>CFBundleShortVersionString</key><string>2.0</string>
+  <key>CFBundleVersion</key><string>2.1</string>
+  <key>CFBundleShortVersionString</key><string>2.1</string>
   <key>CFBundleExecutable</key><string>SparkBrow</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
