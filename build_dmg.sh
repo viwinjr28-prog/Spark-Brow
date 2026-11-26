@@ -5,11 +5,16 @@ APP_BUNDLE="${APP_NAME}.app"
 DMG_NAME="Spark-Brow.dmg"
 STAGE_DIR="./dmg_stage"
 
+echo "Generating Spark Brow app icon..."
+swift make_icon.swift
+iconutil -c icns AppIcon.iconset -o AppIcon.icns || true
+
 echo "Building ${APP_BUNDLE}..."
 rm -rf "${APP_BUNDLE}" "${STAGE_DIR}" "${DMG_NAME}"
 mkdir -p "${APP_BUNDLE}/Contents/MacOS" "${APP_BUNDLE}/Contents/Resources"
 
 cp sparkos.html "${APP_BUNDLE}/Contents/Resources/sparkos.html"
+[ -f AppIcon.icns ] && cp AppIcon.icns "${APP_BUNDLE}/Contents/Resources/AppIcon.icns"
 
 cat > "${APP_BUNDLE}/Contents/Info.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -19,9 +24,10 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" << 'PLIST'
   <key>CFBundleName</key><string>Spark Brow</string>
   <key>CFBundleDisplayName</key><string>Spark Brow</string>
   <key>CFBundleIdentifier</key><string>com.viwin.sparkbrow</string>
-  <key>CFBundleVersion</key><string>2.1</string>
-  <key>CFBundleShortVersionString</key><string>2.1</string>
+  <key>CFBundleVersion</key><string>3.0</string>
+  <key>CFBundleShortVersionString</key><string>3.0</string>
   <key>CFBundleExecutable</key><string>SparkBrow</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
@@ -37,5 +43,5 @@ mkdir -p "${STAGE_DIR}"
 cp -R "${APP_BUNDLE}" "${STAGE_DIR}/"
 ln -s /Applications "${STAGE_DIR}/Applications"
 hdiutil create -volname "Spark Brow" -srcfolder "${STAGE_DIR}" -ov -format UDZO "${DMG_NAME}"
-rm -rf "${STAGE_DIR}"
+rm -rf "${STAGE_DIR}" AppIcon.iconset AppIcon.icns
 echo "Done! Created ${DMG_NAME}"
