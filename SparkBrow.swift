@@ -1,17 +1,30 @@
 import Cocoa
 import WebKit
 
+func roundedMaskImage(radius: CGFloat) -> NSImage {
+    let d = radius * 2 + 2
+    let img = NSImage(size: NSSize(width: d, height: d), flipped: false) { rect in
+        NSColor.black.setFill()
+        NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+        return true
+    }
+    img.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+    img.resizingMode = .stretch
+    return img
+}
+
 final class AirGlassView: NSVisualEffectView {
-    init(material: NSVisualEffectView.Material = .hudWindow, blending: NSVisualEffectView.BlendingMode = .behindWindow, radius: CGFloat = 18) {
+    init(material: NSVisualEffectView.Material = .hudWindow, blending: NSVisualEffectView.BlendingMode = .withinWindow, radius: CGFloat = 18) {
         super.init(frame: .zero)
         self.material = material
         self.blendingMode = blending
         self.state = .active
+        self.maskImage = roundedMaskImage(radius: radius)
         self.wantsLayer = true
         self.layer?.cornerRadius = radius
         self.layer?.masksToBounds = true
         self.layer?.borderWidth = 1
-        self.layer?.borderColor = NSColor.white.withAlphaComponent(0.18).cgColor
+        self.layer?.borderColor = NSColor.white.withAlphaComponent(0.20).cgColor
     }
     required init?(coder: NSCoder) { fatalError() }
 }
@@ -36,6 +49,7 @@ final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDe
     var leftRail: AirGlassView!
     var drawerBox: AirGlassView!
     var drawerWebView: WKWebView!
+    var bootOverlay: NSVisualEffectView!
     var tabStack: NSStackView!
     var urlField: NSTextField!
     var webContainer: NSView!
@@ -45,7 +59,6 @@ final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDe
     var drawerOpen = false
     var activeDrawerPanel = "boosts"
     var adBlockRuleList: WKContentRuleList?
-    var adBlockEnabled = true
     var breakTimer: Timer?
 
     let adBlockJSON = """
@@ -310,6 +323,48 @@ final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDe
         NSApp.mainMenu = mainMenu
     }
 
+    func playBootAnimation() {
+        bootOverlay = NSVisualEffectView(frame: glassRoot.bounds)
+        bootOverlay.material = .hudWindow
+        bootOverlay.blendingMode = .behindWindow
+        bootOverlay.state = .active
+        bootOverlay.autoresizingMask = [.width, .height]
+        bootOverlay.wantsLayer = true
+        bootOverlay.layer?.backgroundColor = NSColor(calibratedRed: 0.02, green: 0.03, blue: 0.09, alpha: 0.85).cgColor
+
+        let bootWeb = WKWebView(frame: bootOverlay.bounds)
+        bootWeb.setValue(false, forKey: "drawsBackground")
+        bootWeb.autoresizingMask = [.width, .height]
+        let bootHTML = """
+        <!DOCTYPE html><html><head><meta charset="utf-8"><style>
+        body { margin:0; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+          font-family:-apple-system,BlinkMacSystemFont,sans-serif; color:#fff; background:transparent; overflow:hidden; }
+        .star { width:56px; height:56px; margin-bottom:16px; animation: pop 0.7s cubic-bezier(0.2,0.9,0.3,1.2) forwards; }
+        @keyframes pop { 0%{ transform:scale(0.35) rotate(-25deg); opacity:0; } 100%{ transform:scale(1) rotate(0); opacity:1; } }
+        h1 { margin:0; font-size:38px; letter-spacing:-1.2px; animation: up 0.65s ease forwards; }
+        p { margin:8px 0 0; font-size:12px; letter-spacing:1.4px; text-transform:uppercase; color:rgba(255,255,255,0.55); animation: up 0.75s ease forwards; }
+        @keyframes up { 0%{ transform:translateY(10px); opacity:0; } 100%{ transform:translateY(0); opacity:1; } }
+        </style></head><body>
+          <svg class="star" viewBox="0 0 64 64"><path d="M32 4 L39 25 L60 32 L39 39 L32 60 L25 39 L4 32 L25 25 Z" fill="#fff"/></svg>
+          <h1>Spark Brow</h1>
+          <p>Air Edition</p>
+        </body></html>
+        """
+        bootWeb.loadHTMLString(bootHTML, baseURL: nil)
+        bootOverlay.addSubview(bootWeb)
+        glassRoot.addSubview(bootOverlay)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.95) {
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.48
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                self.bootOverlay.animator().alphaValue = 0
+            }, completionHandler: {
+                self.bootOverlay.removeFromSuperview()
+            })
+        }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenu()
         sharedConfig = WKWebViewConfiguration()
@@ -342,8 +397,13 @@ final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDe
         glassRoot.autoresizingMask = [.width, .height]
         window.contentView = glassRoot
 
-        // Floating Opera Air Top Bar
-        topBar = AirGlassView(material: .headerView, blending: .withinWindow, radius: 16)
+        // Full-bleed Web Container (fills the entire window behind floating Air bars)
+        webContainer = NSView()
+        webContainer.wantsLayer = true
+        webContainer.translatesAutoresizingMaskIntoConstraints = false
+
+        // Floating Opera Air Top Bar (centered floating pill)
+        topBar = AirGlassView(material: .hudWindow, blending: .withinWindow, radius: 16)
         topBar.translatesAutoresizingMaskIntoConstraints = false
 
         let backBtn = makeIconBtn("chevron.left", action: #selector(goBack))
@@ -354,7 +414,7 @@ final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDe
         let urlPill = NSView()
         urlPill.wantsLayer = true
         urlPill.layer?.cornerRadius = 11
-        urlPill.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.24).cgColor
+        urlPill.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.28).cgColor
         urlPill.layer?.borderWidth = 1
         urlPill.layer?.borderColor = NSColor.white.withAlphaComponent(0.16).cgColor
         urlPill.translatesAutoresizingMaskIntoConstraints = false
@@ -387,15 +447,15 @@ final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDe
         topBar.addSubview(navRow)
         topBar.addSubview(tabStack)
 
-        // Floating Opera Air Left Glass Rail
+        // Floating Opera Air Left Glass Rail (positioned cleanly below traffic lights without colliding with SparkOS rail)
         leftRail = AirGlassView(material: .hudWindow, blending: .withinWindow, radius: 18)
         leftRail.translatesAutoresizingMaskIntoConstraints = false
 
-        let rHome = makeIconBtn("sparkles", action: #selector(goHome), size: 34)
-        let rBoost = makeIconBtn("waveform", action: #selector(openBoosts), size: 34)
-        let rBreath = makeIconBtn("wind", action: #selector(openBreak), size: 34)
-        let rBm = makeIconBtn("bookmark", action: #selector(openBookmarks), size: 34)
-        let rAir = makeIconBtn("slider.horizontal.3", action: #selector(openAirSettings), size: 34)
+        let rHome = makeIconBtn("sparkles", action: #selector(goHome), size: 32)
+        let rBoost = makeIconBtn("waveform", action: #selector(openBoosts), size: 32)
+        let rBreath = makeIconBtn("wind", action: #selector(openBreak), size: 32)
+        let rBm = makeIconBtn("bookmark", action: #selector(openBookmarks), size: 32)
+        let rAir = makeIconBtn("slider.horizontal.3", action: #selector(openAirSettings), size: 32)
 
         let railStack = NSStackView(views: [rHome, rBoost, rBreath, rBm, rAir])
         railStack.orientation = .vertical
@@ -403,7 +463,7 @@ final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDe
         railStack.translatesAutoresizingMaskIntoConstraints = false
         leftRail.addSubview(railStack)
 
-        // Floating Air Drawer (Soundscapes, Take a Break, Bookmarks, Air Settings)
+        // Floating Air Drawer
         drawerBox = AirGlassView(material: .popover, blending: .withinWindow, radius: 22)
         drawerBox.translatesAutoresizingMaskIntoConstraints = false
         drawerBox.isHidden = true
@@ -416,53 +476,46 @@ final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDe
         drawerWebView.loadHTMLString(airPanelHTML(), baseURL: nil)
         drawerBox.addSubview(drawerWebView)
 
-        // Main Web Content Container
-        webContainer = NSView()
-        webContainer.wantsLayer = true
-        webContainer.layer?.cornerRadius = 18
-        webContainer.layer?.masksToBounds = true
-        webContainer.layer?.borderWidth = 1
-        webContainer.layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
-        webContainer.translatesAutoresizingMaskIntoConstraints = false
-
+        glassRoot.addSubview(webContainer)
         glassRoot.addSubview(topBar)
         glassRoot.addSubview(leftRail)
-        glassRoot.addSubview(webContainer)
         glassRoot.addSubview(drawerBox)
 
         NSLayoutConstraint.activate([
-            topBar.topAnchor.constraint(equalTo: glassRoot.topAnchor, constant: 10),
-            topBar.leadingAnchor.constraint(equalTo: glassRoot.leadingAnchor, constant: 78),
-            topBar.trailingAnchor.constraint(equalTo: glassRoot.trailingAnchor, constant: -12),
+            webContainer.topAnchor.constraint(equalTo: glassRoot.topAnchor),
+            webContainer.leadingAnchor.constraint(equalTo: glassRoot.leadingAnchor),
+            webContainer.trailingAnchor.constraint(equalTo: glassRoot.trailingAnchor),
+            webContainer.bottomAnchor.constraint(equalTo: glassRoot.bottomAnchor),
 
-            navRow.topAnchor.constraint(equalTo: topBar.topAnchor, constant: 8),
+            topBar.topAnchor.constraint(equalTo: glassRoot.topAnchor, constant: 12),
+            topBar.centerXAnchor.constraint(equalTo: glassRoot.centerXAnchor),
+            topBar.leadingAnchor.constraint(greaterThanOrEqualTo: glassRoot.leadingAnchor, constant: 90),
+            topBar.trailingAnchor.constraint(lessThanOrEqualTo: glassRoot.trailingAnchor, constant: -90),
+            topBar.widthAnchor.constraint(lessThanOrEqualToConstant: 860),
+
+            navRow.topAnchor.constraint(equalTo: topBar.topAnchor, constant: 7),
             navRow.leadingAnchor.constraint(equalTo: topBar.leadingAnchor, constant: 10),
             navRow.trailingAnchor.constraint(equalTo: topBar.trailingAnchor, constant: -10),
-            urlPill.heightAnchor.constraint(equalToConstant: 28),
-            urlPill.widthAnchor.constraint(greaterThanOrEqualToConstant: 260),
+            urlPill.heightAnchor.constraint(equalToConstant: 26),
+            urlPill.widthAnchor.constraint(greaterThanOrEqualToConstant: 320),
             urlField.leadingAnchor.constraint(equalTo: urlPill.leadingAnchor, constant: 12),
             urlField.trailingAnchor.constraint(equalTo: urlPill.trailingAnchor, constant: -12),
             urlField.centerYAnchor.constraint(equalTo: urlPill.centerYAnchor),
 
-            tabStack.topAnchor.constraint(equalTo: navRow.bottomAnchor, constant: 7),
+            tabStack.topAnchor.constraint(equalTo: navRow.bottomAnchor, constant: 6),
             tabStack.leadingAnchor.constraint(equalTo: topBar.leadingAnchor, constant: 10),
             tabStack.trailingAnchor.constraint(equalTo: topBar.trailingAnchor, constant: -10),
-            tabStack.bottomAnchor.constraint(equalTo: topBar.bottomAnchor, constant: -8),
-            tabStack.heightAnchor.constraint(equalToConstant: 24),
+            tabStack.bottomAnchor.constraint(equalTo: topBar.bottomAnchor, constant: -7),
+            tabStack.heightAnchor.constraint(equalToConstant: 22),
 
-            leftRail.leadingAnchor.constraint(equalTo: glassRoot.leadingAnchor, constant: 12),
-            leftRail.centerYAnchor.constraint(equalTo: webContainer.centerYAnchor),
-            leftRail.widthAnchor.constraint(equalToConstant: 50),
+            leftRail.leadingAnchor.constraint(equalTo: glassRoot.leadingAnchor, constant: 16),
+            leftRail.topAnchor.constraint(equalTo: glassRoot.topAnchor, constant: 70),
+            leftRail.widthAnchor.constraint(equalToConstant: 48),
             railStack.topAnchor.constraint(equalTo: leftRail.topAnchor, constant: 10),
             railStack.bottomAnchor.constraint(equalTo: leftRail.bottomAnchor, constant: -10),
             railStack.centerXAnchor.constraint(equalTo: leftRail.centerXAnchor),
 
-            webContainer.topAnchor.constraint(equalTo: topBar.bottomAnchor, constant: 10),
-            webContainer.leadingAnchor.constraint(equalTo: leftRail.trailingAnchor, constant: 10),
-            webContainer.trailingAnchor.constraint(equalTo: glassRoot.trailingAnchor, constant: -12),
-            webContainer.bottomAnchor.constraint(equalTo: glassRoot.bottomAnchor, constant: -12),
-
-            drawerBox.topAnchor.constraint(equalTo: webContainer.topAnchor, constant: 8),
+            drawerBox.topAnchor.constraint(equalTo: leftRail.topAnchor),
             drawerBox.leadingAnchor.constraint(equalTo: leftRail.trailingAnchor, constant: 12),
             drawerBox.widthAnchor.constraint(equalToConstant: 330),
             drawerBox.heightAnchor.constraint(equalToConstant: 430),
@@ -474,6 +527,7 @@ final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDe
         ])
 
         createTab(request: nil)
+        playBootAnimation()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -575,9 +629,9 @@ final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDe
             b.wantsLayer = true
             b.font = NSFont.systemFont(ofSize: 11, weight: i == activeIndex ? .semibold : .medium)
             b.contentTintColor = i == activeIndex ? .white : NSColor.white.withAlphaComponent(0.70)
-            b.layer?.cornerRadius = 8
+            b.layer?.cornerRadius = 7
             b.layer?.backgroundColor = (i == activeIndex ? NSColor.white.withAlphaComponent(0.18) : NSColor.white.withAlphaComponent(0.06)).cgColor
-            b.heightAnchor.constraint(equalToConstant: 24).isActive = true
+            b.heightAnchor.constraint(equalToConstant: 22).isActive = true
             tabStack.addArrangedSubview(b)
         }
     }
