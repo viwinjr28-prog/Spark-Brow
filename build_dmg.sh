@@ -9,6 +9,8 @@ echo "Building ${APP_BUNDLE}..."
 rm -rf "${APP_BUNDLE}" "${STAGE_DIR}" "${DMG_NAME}"
 mkdir -p "${APP_BUNDLE}/Contents/MacOS" "${APP_BUNDLE}/Contents/Resources"
 
+cp sparkos.html "${APP_BUNDLE}/Contents/Resources/sparkos.html"
+
 cat > "${APP_BUNDLE}/Contents/Info.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -17,8 +19,8 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" << 'PLIST'
   <key>CFBundleName</key><string>Spark Brow</string>
   <key>CFBundleDisplayName</key><string>Spark Brow</string>
   <key>CFBundleIdentifier</key><string>com.viwin.sparkbrow</string>
-  <key>CFBundleVersion</key><string>1.0</string>
-  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>2.0</string>
+  <key>CFBundleShortVersionString</key><string>2.0</string>
   <key>CFBundleExecutable</key><string>SparkBrow</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
@@ -28,6 +30,7 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" << 'PLIST'
 PLIST
 
 swiftc -O -framework Cocoa -framework WebKit SparkBrow.swift -o "${APP_BUNDLE}/Contents/MacOS/SparkBrow"
+codesign --force --deep --sign - "${APP_BUNDLE}" || true
 
 echo "Packaging ${DMG_NAME}..."
 mkdir -p "${STAGE_DIR}"

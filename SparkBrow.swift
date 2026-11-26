@@ -14,7 +14,7 @@ final class GlassCardView: NSVisualEffectView {
 
 final class BrowserTab {
     let id = UUID()
-    var title: String = "Spark Brow"
+    var title: String = "SparkOS"
     var urlString: String = "spark://home"
     let webView: WKWebView
     init(config: WKWebViewConfiguration) {
@@ -27,50 +27,19 @@ final class BrowserTab {
 final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDelegate, NSTextFieldDelegate {
     var window: NSWindow!
     var glassRoot: GlassCardView!
+    var sidebarView: NSVisualEffectView!
+    var sidebarWidthConstraint: NSLayoutConstraint!
+    var sidebarOpen = false
     var tabStack: NSStackView!
     var urlField: NSTextField!
     var webContainer: NSView!
     var tabs: [BrowserTab] = []
     var activeIndex: Int = 0
+    var sharedConfig: WKWebViewConfiguration!
 
-    let startPageHTML = """
-    <!DOCTYPE html>
-    <html><head><meta charset="utf-8"><style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
-      font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #fff;
-      background: radial-gradient(circle at 75% 20%, rgba(124,58,237,0.42), rgba(2,6,23,0.72) 70%);
+    func sparkOSFileURL() -> URL? {
+        return Bundle.main.url(forResource: "sparkos", withExtension: "html")
     }
-    .card {
-      padding: 34px 40px; border-radius: 26px; text-align: center;
-      background: rgba(255,255,255,0.08); backdrop-filter: blur(24px);
-      border: 1px solid rgba(255,255,255,0.22); box-shadow: 0 24px 60px rgba(0,0,0,0.45);
-    }
-    h1 { margin: 0 0 8px; font-size: 46px; letter-spacing: -1.5px; }
-    p { margin: 0 0 20px; color: rgba(255,255,255,0.72); font-size: 14px; }
-    .links { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-    a {
-      text-decoration: none; color: #fff; font-size: 13px; font-weight: 600;
-      padding: 9px 16px; border-radius: 12px; background: rgba(255,255,255,0.12);
-      border: 1px solid rgba(255,255,255,0.18);
-    }
-    a:hover { background: rgba(124,58,237,0.55); }
-    .credit { margin-top: 18px; font-size: 11px; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.45); }
-    </style></head><body>
-      <div class="card">
-        <h1>Spark Brow</h1>
-        <p>Liquid Glass Browser for macOS</p>
-        <div class="links">
-          <a href="https://www.google.com">Google</a>
-          <a href="https://www.youtube.com">YouTube</a>
-          <a href="https://github.com/viwinjr28-prog/SparkOS">SparkOS Repo</a>
-          <a href="https://en.wikipedia.org">Wikipedia</a>
-        </div>
-        <div class="credit">Made by Viwin Jayaramanrani</div>
-      </div>
-    </body></html>
-    """
 
     func setupMenu() {
         let mainMenu = NSMenu()
@@ -103,6 +72,7 @@ final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDe
         let viewItem = NSMenuItem()
         mainMenu.addItem(viewItem)
         let viewMenu = NSMenu(title: "View")
+        viewMenu.addItem(withTitle: "Toggle Sidebar", action: #selector(toggleSidebar), keyEquivalent: "s")
         viewMenu.addItem(withTitle: "Reload", action: #selector(reloadPage), keyEquivalent: "r")
         viewMenu.addItem(withTitle: "Back", action: #selector(goBack), keyEquivalent: "[")
         viewMenu.addItem(withTitle: "Forward", action: #selector(goForward), keyEquivalent: "]")
@@ -113,8 +83,11 @@ final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDe
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenu()
+        sharedConfig = WKWebViewConfiguration()
+        sharedConfig.websiteDataStore = .default()
+
         let style: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 760), styleMask: style, backing: .buffered, defer: false)
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 790), styleMask: style, backing: .buffered, defer: false)
         window.center()
         window.title = "Spark Brow"
         window.titleVisibility = .hidden
@@ -127,79 +100,156 @@ final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDe
         glassRoot.autoresizingMask = [.width, .height]
         window.contentView = glassRoot
 
+        // Safari-style top bar (toolbar + full-width tab strip)
         let topBar = NSVisualEffectView()
         topBar.material = .headerView
         topBar.blendingMode = .withinWindow
         topBar.state = .active
         topBar.wantsLayer = true
-        topBar.layer?.cornerRadius = 16
-        topBar.layer?.borderWidth = 1
-        topBar.layer?.borderColor = NSColor.white.withAlphaComponent(0.18).cgColor
         topBar.translatesAutoresizingMaskIntoConstraints = false
 
+        let sidebarBtn = makeIconBtn("sidebar.left", action: #selector(toggleSidebar))
         let backBtn = makeIconBtn("chevron.left", action: #selector(goBack))
         let fwdBtn = makeIconBtn("chevron.right", action: #selector(goForward))
-        let reloadBtn = makeIconBtn("arrow.clockwise", action: #selector(reloadPage))
-        let homeBtn = makeIconBtn("house", action: #selector(goHome))
-        let newTabBtn = makeIconBtn("plus", action: #selector(addNewTab))
+
+        // Safari-style centered pill address bar with reload button
+        let urlPill = NSView()
+        urlPill.wantsLayer = true
+        urlPill.layer?.cornerRadius = 11
+        urlPill.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.28).cgColor
+        urlPill.layer?.borderWidth = 1
+        urlPill.layer?.borderColor = NSColor.white.withAlphaComponent(0.18).cgColor
+        urlPill.translatesAutoresizingMaskIntoConstraints = false
 
         urlField = NSTextField()
-        urlField.placeholderString = "Search Google or enter website..."
+        urlField.placeholderString = "Search or enter website name"
         urlField.isBezeled = false
-        urlField.drawsBackground = true
-        urlField.backgroundColor = NSColor.black.withAlphaComponent(0.28)
+        urlField.drawsBackground = false
         urlField.textColor = .white
+        urlField.alignment = .center
         urlField.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        urlField.wantsLayer = true
-        urlField.layer?.cornerRadius = 11
-        urlField.layer?.borderWidth = 1
-        urlField.layer?.borderColor = NSColor.white.withAlphaComponent(0.16).cgColor
         urlField.delegate = self
         urlField.translatesAutoresizingMaskIntoConstraints = false
 
-        let navRow = NSStackView(views: [backBtn, fwdBtn, reloadBtn, homeBtn, urlField, newTabBtn])
+        let reloadBtn = makeIconBtn("arrow.clockwise", action: #selector(reloadPage), size: 22)
+        reloadBtn.layer?.backgroundColor = NSColor.clear.cgColor
+
+        urlPill.addSubview(urlField)
+        urlPill.addSubview(reloadBtn)
+
+        let homeBtn = makeIconBtn("house", action: #selector(goHome))
+        let shareBtn = makeIconBtn("square.and.arrow.up", action: #selector(copyCurrentURL))
+        let newTabBtn = makeIconBtn("plus", action: #selector(addNewTab))
+
+        let leftSpacer = NSView(); leftSpacer.translatesAutoresizingMaskIntoConstraints = false
+        let rightSpacer = NSView(); rightSpacer.translatesAutoresizingMaskIntoConstraints = false
+
+        let navRow = NSStackView(views: [sidebarBtn, backBtn, fwdBtn, leftSpacer, urlPill, rightSpacer, homeBtn, shareBtn, newTabBtn])
         navRow.orientation = .horizontal
         navRow.spacing = 8
+        navRow.alignment = .centerY
         navRow.translatesAutoresizingMaskIntoConstraints = false
 
         tabStack = NSStackView()
         tabStack.orientation = .horizontal
+        tabStack.distribution = .fillEqually
         tabStack.spacing = 6
         tabStack.translatesAutoresizingMaskIntoConstraints = false
 
         topBar.addSubview(navRow)
         topBar.addSubview(tabStack)
 
+        // Collapsible Safari-style sidebar
+        sidebarView = NSVisualEffectView()
+        sidebarView.material = .sidebar
+        sidebarView.blendingMode = .withinWindow
+        sidebarView.state = .active
+        sidebarView.wantsLayer = true
+        sidebarView.layer?.borderWidth = 0.5
+        sidebarView.layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+        sidebarView.translatesAutoresizingMaskIntoConstraints = false
+
+        let sbTitle = NSTextField(labelWithString: "Bookmarks")
+        sbTitle.font = NSFont.systemFont(ofSize: 11, weight: .bold)
+        sbTitle.textColor = NSColor.white.withAlphaComponent(0.6)
+
+        let bmItems: [(String, String)] = [
+            ("SparkOS Home", "spark://home"),
+            ("Google", "https://www.google.com"),
+            ("YouTube", "https://www.youtube.com"),
+            ("GitHub · SparkOS", "https://github.com/viwinjr28-prog/SparkOS"),
+            ("Wikipedia", "https://en.wikipedia.org")
+        ]
+        let sbList = NSStackView()
+        sbList.orientation = .vertical
+        sbList.alignment = .leading
+        sbList.spacing = 6
+        sbList.translatesAutoresizingMaskIntoConstraints = false
+        sbList.addArrangedSubview(sbTitle)
+        for (idx, item) in bmItems.enumerated() {
+            let b = NSButton(title: "  " + item.0, target: self, action: #selector(openBookmark(_:)))
+            b.tag = idx
+            b.isBordered = false
+            b.contentTintColor = .white
+            b.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+            b.alignment = .left
+            b.wantsLayer = true
+            b.layer?.cornerRadius = 8
+            b.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
+            b.widthAnchor.constraint(equalToConstant: 186).isActive = true
+            b.heightAnchor.constraint(equalToConstant: 28).isActive = true
+            sbList.addArrangedSubview(b)
+        }
+        sidebarView.addSubview(sbList)
+
         webContainer = NSView()
         webContainer.wantsLayer = true
-        webContainer.layer?.cornerRadius = 16
-        webContainer.layer?.masksToBounds = true
-        webContainer.layer?.borderWidth = 1
-        webContainer.layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
         webContainer.translatesAutoresizingMaskIntoConstraints = false
 
         glassRoot.addSubview(topBar)
+        glassRoot.addSubview(sidebarView)
         glassRoot.addSubview(webContainer)
 
+        sidebarWidthConstraint = sidebarView.widthAnchor.constraint(equalToConstant: 0)
+
         NSLayoutConstraint.activate([
-            topBar.topAnchor.constraint(equalTo: glassRoot.topAnchor, constant: 34),
-            topBar.leadingAnchor.constraint(equalTo: glassRoot.leadingAnchor, constant: 12),
-            topBar.trailingAnchor.constraint(equalTo: glassRoot.trailingAnchor, constant: -12),
+            topBar.topAnchor.constraint(equalTo: glassRoot.topAnchor),
+            topBar.leadingAnchor.constraint(equalTo: glassRoot.leadingAnchor),
+            topBar.trailingAnchor.constraint(equalTo: glassRoot.trailingAnchor),
 
             navRow.topAnchor.constraint(equalTo: topBar.topAnchor, constant: 10),
-            navRow.leadingAnchor.constraint(equalTo: topBar.leadingAnchor, constant: 12),
-            navRow.trailingAnchor.constraint(equalTo: topBar.trailingAnchor, constant: -12),
-            urlField.heightAnchor.constraint(equalToConstant: 28),
+            navRow.leadingAnchor.constraint(equalTo: topBar.leadingAnchor, constant: 78),
+            navRow.trailingAnchor.constraint(equalTo: topBar.trailingAnchor, constant: -14),
+
+            urlPill.heightAnchor.constraint(equalToConstant: 28),
+            urlPill.widthAnchor.constraint(greaterThanOrEqualToConstant: 360),
+            urlPill.widthAnchor.constraint(lessThanOrEqualToConstant: 560),
+            leftSpacer.widthAnchor.constraint(equalTo: rightSpacer.widthAnchor),
+
+            urlField.leadingAnchor.constraint(equalTo: urlPill.leadingAnchor, constant: 12),
+            urlField.trailingAnchor.constraint(equalTo: reloadBtn.leadingAnchor, constant: -4),
+            urlField.centerYAnchor.constraint(equalTo: urlPill.centerYAnchor),
+            reloadBtn.trailingAnchor.constraint(equalTo: urlPill.trailingAnchor, constant: -6),
+            reloadBtn.centerYAnchor.constraint(equalTo: urlPill.centerYAnchor),
 
             tabStack.topAnchor.constraint(equalTo: navRow.bottomAnchor, constant: 8),
             tabStack.leadingAnchor.constraint(equalTo: topBar.leadingAnchor, constant: 12),
-            tabStack.trailingAnchor.constraint(lessThanOrEqualTo: topBar.trailingAnchor, constant: -12),
+            tabStack.trailingAnchor.constraint(equalTo: topBar.trailingAnchor, constant: -12),
             tabStack.bottomAnchor.constraint(equalTo: topBar.bottomAnchor, constant: -8),
+            tabStack.heightAnchor.constraint(equalToConstant: 26),
 
-            webContainer.topAnchor.constraint(equalTo: topBar.bottomAnchor, constant: 10),
-            webContainer.leadingAnchor.constraint(equalTo: glassRoot.leadingAnchor, constant: 12),
-            webContainer.trailingAnchor.constraint(equalTo: glassRoot.trailingAnchor, constant: -12),
-            webContainer.bottomAnchor.constraint(equalTo: glassRoot.bottomAnchor, constant: -12)
+            sidebarView.topAnchor.constraint(equalTo: topBar.bottomAnchor),
+            sidebarView.leadingAnchor.constraint(equalTo: glassRoot.leadingAnchor),
+            sidebarView.bottomAnchor.constraint(equalTo: glassRoot.bottomAnchor),
+            sidebarWidthConstraint,
+
+            sbList.topAnchor.constraint(equalTo: sidebarView.topAnchor, constant: 14),
+            sbList.leadingAnchor.constraint(equalTo: sidebarView.leadingAnchor, constant: 12),
+
+            webContainer.topAnchor.constraint(equalTo: topBar.bottomAnchor),
+            webContainer.leadingAnchor.constraint(equalTo: sidebarView.trailingAnchor),
+            webContainer.trailingAnchor.constraint(equalTo: glassRoot.trailingAnchor),
+            webContainer.bottomAnchor.constraint(equalTo: glassRoot.bottomAnchor)
         ])
 
         createTab(url: nil)
@@ -207,7 +257,7 @@ final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDe
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    func makeIconBtn(_ symbol: String, action: Selector) -> NSButton {
+    func makeIconBtn(_ symbol: String, action: Selector, size: CGFloat = 28) -> NSButton {
         let b = NSButton()
         b.bezelStyle = .rounded
         b.isBordered = false
@@ -217,15 +267,40 @@ final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDe
         b.action = action
         b.wantsLayer = true
         b.layer?.cornerRadius = 8
-        b.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor
-        b.widthAnchor.constraint(equalToConstant: 28).isActive = true
-        b.heightAnchor.constraint(equalToConstant: 28).isActive = true
+        b.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
+        b.widthAnchor.constraint(equalToConstant: size).isActive = true
+        b.heightAnchor.constraint(equalToConstant: size).isActive = true
         return b
     }
 
+    @objc func toggleSidebar() {
+        sidebarOpen.toggle()
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            sidebarWidthConstraint.animator().constant = sidebarOpen ? 210 : 0
+        }
+    }
+
+    @objc func openBookmark(_ sender: NSButton) {
+        let urls = [
+            "spark://home",
+            "https://www.google.com",
+            "https://www.youtube.com",
+            "https://github.com/viwinjr28-prog/SparkOS",
+            "https://en.wikipedia.org"
+        ]
+        guard sender.tag >= 0 && sender.tag < urls.count else { return }
+        if urls[sender.tag] == "spark://home" { goHome() } else { navigate(urls[sender.tag]) }
+    }
+
+    @objc func copyCurrentURL() {
+        let u = tabs[activeIndex].urlString
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(u, forType: .string)
+    }
+
     func createTab(url: String?) {
-        let cfg = WKWebViewConfiguration()
-        let tab = BrowserTab(config: cfg)
+        let tab = BrowserTab(config: sharedConfig)
         tab.webView.navigationDelegate = self
         tabs.append(tab)
         selectTab(tabs.count - 1)
@@ -247,15 +322,15 @@ final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDe
     func refreshTabBar() {
         tabStack.arrangedSubviews.forEach { tabStack.removeArrangedSubview($0); $0.removeFromSuperview() }
         for (i, t) in tabs.enumerated() {
-            let b = NSButton(title: "  " + String(t.title.prefix(20)) + (tabs.count > 1 ? "  ×" : "  "), target: self, action: #selector(tabClicked(_:)))
+            let b = NSButton(title: String(t.title.prefix(24)) + (tabs.count > 1 ? "   ×" : ""), target: self, action: #selector(tabClicked(_:)))
             b.tag = i
             b.isBordered = false
             b.wantsLayer = true
-            b.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
-            b.contentTintColor = .white
-            b.layer?.cornerRadius = 9
-            b.layer?.backgroundColor = (i == activeIndex ? NSColor.systemPurple.withAlphaComponent(0.55) : NSColor.white.withAlphaComponent(0.10)).cgColor
-            b.heightAnchor.constraint(equalToConstant: 24).isActive = true
+            b.font = NSFont.systemFont(ofSize: 11.5, weight: i == activeIndex ? .semibold : .medium)
+            b.contentTintColor = i == activeIndex ? .white : NSColor.white.withAlphaComponent(0.72)
+            b.layer?.cornerRadius = 8
+            b.layer?.backgroundColor = (i == activeIndex ? NSColor.white.withAlphaComponent(0.18) : NSColor.white.withAlphaComponent(0.06)).cgColor
+            b.heightAnchor.constraint(equalToConstant: 26).isActive = true
             tabStack.addArrangedSubview(b)
         }
     }
@@ -285,9 +360,11 @@ final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDe
     @objc func goHome() {
         let tab = tabs[activeIndex]
         tab.urlString = "spark://home"
-        tab.title = "Spark Brow"
+        tab.title = "SparkOS"
         urlField.stringValue = ""
-        tab.webView.loadHTMLString(startPageHTML, baseURL: nil)
+        if let fileURL = sparkOSFileURL() {
+            tab.webView.loadFileURL(fileURL, allowingReadAccessTo: fileURL.deletingLastPathComponent())
+        }
         refreshTabBar()
     }
 
@@ -317,10 +394,15 @@ final class SparkBrowController: NSObject, NSApplicationDelegate, WKNavigationDe
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard let idx = tabs.firstIndex(where: { $0.webView === webView }) else { return }
-        if let title = webView.title, !title.isEmpty { tabs[idx].title = title }
-        if let u = webView.url?.absoluteString, u != "about:blank" { tabs[idx].urlString = u }
-        if idx == activeIndex && tabs[idx].urlString != "spark://home" {
-            urlField.stringValue = tabs[idx].urlString
+        if let u = webView.url, u.isFileURL && u.lastPathComponent == "sparkos.html" {
+            tabs[idx].urlString = "spark://home"
+            tabs[idx].title = "SparkOS"
+        } else {
+            if let title = webView.title, !title.isEmpty { tabs[idx].title = title }
+            if let u = webView.url?.absoluteString, u != "about:blank" { tabs[idx].urlString = u }
+        }
+        if idx == activeIndex {
+            urlField.stringValue = tabs[idx].urlString == "spark://home" ? "" : tabs[idx].urlString
         }
         refreshTabBar()
     }
