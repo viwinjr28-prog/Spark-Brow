@@ -631,6 +631,31 @@
         .ws-peek-card.show { opacity: 1; transform: translateX(0) scale(1); }
         .ws-peek-card b { font-size: 13px; font-weight: 700; color: #fff; }
         .ws-peek-card span { font-size: 11px; color: rgba(255,255,255,0.68); }
+        /* Integrated Air Tools in #wsRail */
+        .ws-rail-sep { width: 22px; height: 1px; background: rgba(255,255,255,0.18); margin: 4px 0; flex: none; }
+        .air-pop {
+            position: fixed; left: 86px; top: 50%; transform: translateY(-50%) scale(0.96); z-index: 970;
+            width: 310px; padding: 18px; border-radius: 22px; color: #fff; opacity: 0; pointer-events: none;
+            background: rgba(var(--accent-rgb), 0.12);
+            background-image: linear-gradient(160deg, rgba(255,255,255,0.20) 0%, rgba(255,255,255,0.04) 48%, rgba(255,255,255,0.10) 100%);
+            backdrop-filter: blur(28px) saturate(190%); -webkit-backdrop-filter: blur(28px) saturate(190%);
+            border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 24px 60px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,0.35);
+            transition: opacity 0.2s ease, transform 0.22s cubic-bezier(0.2,0.8,0.2,1);
+        }
+        .air-pop.open { opacity: 1; pointer-events: auto; transform: translateY(-50%) scale(1); }
+        .air-pop-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .air-pop-head b { font-size: 15px; }
+        .air-card { padding: 11px 12px; border-radius: 14px; background: rgba(0,0,0,0.24); border: 1px solid rgba(255,255,255,0.12); margin-bottom: 8px; }
+        .air-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .air-sub { font-size: 11px; color: rgba(255,255,255,0.65); margin-top: 2px; }
+        .air-ring {
+            width: 112px; height: 112px; margin: 10px auto; border-radius: 50%;
+            background: radial-gradient(circle, rgba(var(--accent-rgb), 0.45), rgba(var(--accent-rgb), 0.14));
+            border: 2px solid rgba(255,255,255,0.45); display: flex; flex-direction: column; align-items: center; justify-content: center;
+            transition: transform 3.8s ease-in-out, box-shadow 3.8s ease-in-out;
+        }
+        .air-ring.inhale { transform: scale(1.2); box-shadow: 0 0 42px rgba(var(--accent-rgb), 0.65); }
+        .air-ring.exhale { transform: scale(0.86); }
         .upd-log { display: none; flex-direction: column; gap: 10px; padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.08); }
         .upd-log.open { display: flex; }
         .upd-log-ver { font-size: 12px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; }
@@ -953,7 +978,22 @@
 
     <aside class="ws-rail" id="wsRail" aria-label="Workspaces">
         <div class="ws-list" id="wsList"></div>
+        <div class="ws-rail-sep"></div>
+        <button type="button" class="ws-item" id="airSoundBtn" title="Soundscapes (Boosts)" onclick="toggleAirPop('sound')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12v0M8 8v8M12 5v14M16 9v6M20 12v0"/></svg></button>
+        <button type="button" class="ws-item" id="airBreathBtn" title="Take a Break (Breathing)" onclick="toggleAirPop('breath')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/></svg></button>
     </aside>
+    <div class="air-pop" id="airPop">
+        <div class="air-pop-head"><b id="airPopTitle">Soundscapes</b><button type="button" class="s-btn" onclick="closeAirPop()">Close</button></div>
+        <div id="airPaneSound">
+            <div class="air-card"><div class="air-row"><div><b>Hyperfocus · 40Hz</b><div class="air-sub">Brown noise + gamma tone</div></div><button type="button" class="s-btn" id="as-focus" onclick="toggleAirAudio('focus')">Play</button></div><input type="range" class="s-range" style="width:100%;margin-top:8px" min="0" max="100" value="45" oninput="setAirVol(this.value)"></div>
+            <div class="air-card"><div class="air-row"><div><b>Spring Rain</b><div class="air-sub">Soft ambient rainfall</div></div><button type="button" class="s-btn" id="as-rain" onclick="toggleAirAudio('rain')">Play</button></div></div>
+            <div class="air-card"><div class="air-row"><div><b>Sea Waves</b><div class="air-sub">Calm ocean swell</div></div><button type="button" class="s-btn" id="as-waves" onclick="toggleAirAudio('waves')">Play</button></div></div>
+            <div class="air-card"><div class="air-row"><div><b>Deep Relax · 10Hz</b><div class="air-sub">Alpha binaural drone</div></div><button type="button" class="s-btn" id="as-relax" onclick="toggleAirAudio('relax')">Play</button></div></div>
+        </div>
+        <div id="airPaneBreath" style="display:none;text-align:center">
+            <div class="air-card"><div class="air-ring" id="airBreathRing"><b id="airBreathCue">Ready</b><span id="airBreathSec" style="font-size:11px;opacity:0.7">Box 4-4-4-4</span></div><button type="button" class="s-btn primary" id="airBreathToggle" onclick="toggleAirBreath()">Start Breathing</button></div>
+        </div>
+    </div>
     <div class="ws-hot" id="wsHot" aria-hidden="true"></div>
     <div class="ws-peek-card" id="wsPeekCard" aria-hidden="true"><b id="wsPeekName"></b><span id="wsPeekMeta"></span></div>
     <div class="ws-fade" id="wsFade" aria-hidden="true"></div>
@@ -4753,6 +4793,71 @@ function reloadVisualIcons() {
         toggleUpdateLog(true);
         const body = document.getElementById('updLogBody');
         if (body) setTimeout(() => body.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80);
+    }
+    let _airTab = null, _airCtx = null, _airGain = null, _airNodes = [], _airSound = null, _airVol = 0.45;
+    let _airBreathTimer = null, _airBreathStep = 0;
+    function toggleAirPop(tab) {
+        const pop = document.getElementById('airPop');
+        if (!pop) return;
+        if (pop.classList.contains('open') && _airTab === tab) { closeAirPop(); return; }
+        _airTab = tab;
+        document.getElementById('airPopTitle').textContent = tab === 'sound' ? 'Soundscapes' : 'Take a Break';
+        document.getElementById('airPaneSound').style.display = tab === 'sound' ? '' : 'none';
+        document.getElementById('airPaneBreath').style.display = tab === 'breath' ? '' : 'none';
+        pop.classList.add('open');
+    }
+    function closeAirPop() {
+        const pop = document.getElementById('airPop');
+        if (pop) pop.classList.remove('open');
+    }
+    function setAirVol(v) { _airVol = v / 100; if (_airGain) _airGain.gain.value = _airVol * 0.25; }
+    function toggleAirAudio(kind) {
+        _airNodes.forEach(n => { try { n.stop && n.stop(); n.disconnect && n.disconnect(); } catch (e) {} });
+        _airNodes = [];
+        ['focus','rain','waves','relax'].forEach(k => { const b = document.getElementById('as-' + k); if (b) { b.textContent = 'Play'; b.classList.remove('primary'); } });
+        if (_airSound === kind) { _airSound = null; return; }
+        if (!_airCtx) _airCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (_airCtx.state === 'suspended') _airCtx.resume();
+        _airGain = _airCtx.createGain(); _airGain.gain.value = _airVol * 0.25; _airGain.connect(_airCtx.destination);
+        _airSound = kind;
+        const btn = document.getElementById('as-' + kind); if (btn) { btn.textContent = 'Stop'; btn.classList.add('primary'); }
+        if (kind === 'rain' || kind === 'waves' || kind === 'focus') {
+            const buf = _airCtx.createBuffer(1, _airCtx.sampleRate * 2, _airCtx.sampleRate);
+            const data = buf.getChannelData(0); let last = 0;
+            for (let i = 0; i < data.length; i++) { const w = Math.random() * 2 - 1; last = (last + 0.03 * w) / 1.03; data[i] = kind === 'rain' ? w * 0.35 : last * 3.2; }
+            const src = _airCtx.createBufferSource(); src.buffer = buf; src.loop = true;
+            const flt = _airCtx.createBiquadFilter(); flt.type = 'lowpass';
+            flt.frequency.value = kind === 'rain' ? 1400 : (kind === 'waves' ? 420 : 650);
+            src.connect(flt);
+            if (kind === 'waves') { const lfo = _airCtx.createOscillator(), lg = _airCtx.createGain(); lfo.frequency.value = 0.12; lg.gain.value = 260; lfo.connect(lg); lg.connect(flt.frequency); lfo.start(); _airNodes.push(lfo); }
+            flt.connect(_airGain); src.start(); _airNodes.push(src, flt);
+        }
+        if (kind === 'focus' || kind === 'relax') {
+            const base = kind === 'focus' ? 200 : 174, diff = kind === 'focus' ? 40 : 10;
+            const o1 = _airCtx.createOscillator(), o2 = _airCtx.createOscillator(), g = _airCtx.createGain();
+            o1.frequency.value = base; o2.frequency.value = base + diff; g.gain.value = 0.16;
+            o1.connect(g); o2.connect(g); g.connect(_airGain); o1.start(); o2.start(); _airNodes.push(o1, o2, g);
+        }
+    }
+    function toggleAirBreath() {
+        const btn = document.getElementById('airBreathToggle'), ring = document.getElementById('airBreathRing');
+        if (_airBreathTimer) {
+            clearInterval(_airBreathTimer); _airBreathTimer = null;
+            btn.textContent = 'Start Breathing'; ring.className = 'air-ring';
+            document.getElementById('airBreathCue').textContent = 'Ready';
+            document.getElementById('airBreathSec').textContent = 'Box 4-4-4-4';
+            return;
+        }
+        btn.textContent = 'Stop';
+        const steps = [['Inhale','4s','inhale'],['Hold','4s','inhale'],['Exhale','4s','exhale'],['Rest','4s','exhale']];
+        const tick = () => {
+            const s = steps[_airBreathStep % 4];
+            document.getElementById('airBreathCue').textContent = s[0];
+            document.getElementById('airBreathSec').textContent = s[1];
+            ring.className = 'air-ring ' + s[2];
+            _airBreathStep++;
+        };
+        tick(); _airBreathTimer = setInterval(tick, 4000);
     }
     function closeUpdateBanner() {
         clearTimeout(updTimer);
